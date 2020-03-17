@@ -76,6 +76,7 @@ void Error_Handler(void);
 #define HSENSOR_B_GPIO_Port GPIOB
 #define HSENSOR_C_Pin GPIO_PIN_4
 #define HSENSOR_C_GPIO_Port GPIOB
+#define HSENSOR_C_EXTI_IRQn EXTI4_IRQn
 #define LED1_Pin GPIO_PIN_5
 #define LED1_GPIO_Port GPIOB
 #define LED2_Pin GPIO_PIN_8

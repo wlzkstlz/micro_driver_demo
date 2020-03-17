@@ -47,27 +47,27 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-/***********************ã€Encoderã€‘**************************/
+/***********************¡¾Encoder¡¿**************************/
 #define _ENCODER_CYCLE_ 60000
 #define _ENCODER_RESET_VALUE_ 30000
 uint32_t g_Encoder = _ENCODER_RESET_VALUE_;
-/***********************ã€Encoder endã€‘**************************/
+/***********************¡¾Encoder end¡¿**************************/
 
-/***********************ã€Speed Senseã€‘**************************/
+/***********************¡¾Speed Sense¡¿**************************/
 uint32_t g_TCount_Repeats = 0;
 double g_Wsense = 0.0f;
-/***********************ã€Speed Sense endã€‘**************************/
+/***********************¡¾Speed Sense end¡¿**************************/
 
-/***********************ã€PID Controllerã€‘**************************/
+/***********************¡¾PID Controller¡¿**************************/
 uint8_t gb_Release_Motor = 1;
 uint8_t g_PWM_Dir = 0; //0 stands for anticlockwise
 uint32_t g_PWM_Out = 0;
-#define _PWM_CYCLE_FULL_ 2000 //ä¿®æ”¹å®šæ—¶å™¨å‘¨æœŸæ—¶ï¼Œè®°å¾—åŒæ­¥ä¿®æ”¹è¿™é‡Œï¼
+#define _PWM_CYCLE_FULL_ 2000 //ĞŞ¸Ä¶¨Ê±Æ÷ÖÜÆÚÊ±£¬¼ÇµÃÍ¬²½ĞŞ¸ÄÕâÀï£¡
 #define _PWM_CYCLE_SAFE_ (_PWM_CYCLE_FULL_ - 100)
 #define _PWM_CYCLE_OFFSET_ 200 //400
 
 #define _PWM_BASE_SCALE_ (_PWM_CYCLE_FULL_ * (1.0 / (2.0 * 3.1416 * 4500.0 * 7.2 / 60.0)))
-double g_Vset = -123.0; //å¯¹åº”15000rpm
+double g_Vset = -123.0; //¶ÔÓ¦15000rpm
 
 double g_Err_Pre = 0;
 float g_PWM = 0;
@@ -75,17 +75,17 @@ const float g_Kp = 1.0 * _PWM_BASE_SCALE_;
 const float g_Ki = 0.05 * g_Kp;
 const float g_Tscale = 1.0;
 
-/***********************ã€PID Controller endã€‘**************************/
+/***********************¡¾PID Controller end¡¿**************************/
 
-/***********************ã€Block Boostã€‘**************************/
+/***********************¡¾Block Boost¡¿**************************/
 uint8_t gb_Blocked = 0;
 uint16_t gn_Block_Boost_Count = 0;
 uint8_t gn_Block_Boost_Offset = 0;
-#define _BOOST_COUNTS_ (((uint32_t)(4 * 9 * 1) / (uint32_t)6) * 6) //è¦æ±‚ï¿½????6çš„ï¿½?ï¿½æ•°
+#define _BOOST_COUNTS_ (((uint32_t)(4 * 9 * 1) / (uint32_t)6) * 6) //ÒªÇó?????6µÄ???Êı
 
-//TODO : å°†æ‹–åŠ¨ç”µå‹è®¾ç½®ä¸ºå¯ä»¥pwmè°ƒèŠ‚,ä»¥ç¼“è§£å¯åŠ¨å‘çƒ­é—®ï¿½????
+//TODO : ½«ÍÏ¶¯µçÑ¹ÉèÖÃÎª¿ÉÒÔpwmµ÷½Ú,ÒÔ»º½âÆô¶¯·¢ÈÈÎÊ?????
 
-/***********************ã€Block Boost Endã€‘**************************/
+/***********************¡¾Block Boost End¡¿**************************/
 
 /* USER CODE END PV */
 
@@ -107,10 +107,11 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  //å°½å¯èƒ½å¿«é€Ÿåœ°å°†mosfeté©±åŠ¨ gpioè®¾ç½®ä½ç”µå¹³ï¼
+  //¾¡¿ÉÄÜ¿ìËÙµØ½«mosfetÇı¶¯ gpioÉèÖÃµÍµçÆ½£¡
   GPIOA->BSRR = (uint32_t)(PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin) << 16u;
   GPIOB->BSRR = (uint32_t)(PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin) << 16u;
   /* USER CODE END 1 */
+  
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -137,20 +138,20 @@ int main(void)
   MX_TIM4_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  //ã€encoder Timer2 initã€‘
-  __HAL_TIM_SET_COUNTER(&htim2, _ENCODER_RESET_VALUE_); //åˆå§‹åŒ–å®šæ—¶å™¨åˆå§‹å€¼ä¸º_ENCODER_RESET_VALUE_
+  //¡¾encoder Timer2 init¡¿
+  __HAL_TIM_SET_COUNTER(&htim2, _ENCODER_RESET_VALUE_); //³õÊ¼»¯¶¨Ê±Æ÷³õÊ¼ÖµÎª_ENCODER_RESET_VALUE_
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
 
-  //ã€pwm Timer1 initã€‘
+  //¡¾pwm Timer1 init¡¿
   HAL_TIM_Base_Start_IT(&htim1);
   HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_2);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
 
-  //ã€1k Hz Timer3 initã€‘
+  //¡¾1k Hz Timer3 init¡¿
   HAL_TIM_Base_Start_IT(&htim3);
 
-  //ã€Timer4 initã€‘
+  //¡¾Timer4 init¡¿
   HAL_TIM_Base_Start_IT(&htim4);
 
   /* USER CODE END 2 */
@@ -189,7 +190,8 @@ void SystemClock_Config(void)
   }
   /** Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
@@ -203,7 +205,7 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-//pwm å ç©ºæ¯”é«˜ç”µå¹³ç»“æŸå›è°ƒå‡½æ•°ï¼Œåœ¨è¿™é‡Œæ¸…é›¶ç”µæœºé©±åŠ¨
+//pwm Õ¼¿Õ±È¸ßµçÆ½½áÊø»Øµ÷º¯Êı£¬ÔÚÕâÀïÇåÁãµç»úÇı¶¯
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim == (&htim1))
@@ -334,7 +336,7 @@ static const uint16_t table_reset_PortB[16] =
 
 static const uint8_t boost_table_offset[8] =
     {
-        //çº¢ç»¿ï¿½????
+        //ºìÂÌ?????
         5, //0 0 0
         4, //0 0 1
         0, //xxx
@@ -347,42 +349,42 @@ static const uint8_t boost_table_offset[8] =
 
 static const uint16_t boost_table_set_PortA[6] =
     {
-        PWM_BP_Pin, //çº¢x ï¿½????1 ï¿½????0
-        PWM_BP_Pin, //ï¿½????0 ï¿½????1 è“x
-        PWM_CP_Pin, //ï¿½????0 ç»¿x ï¿½????1
-        PWM_CP_Pin, //çº¢x ï¿½????0 ï¿½????1
-        PWM_AP_Pin, //ï¿½????1 ï¿½????0 è“x
-        PWM_AP_Pin, //ï¿½????1 ç»¿x ï¿½????0
+        PWM_BP_Pin, //ºìx ?????1 ?????0
+        PWM_BP_Pin, //?????0 ?????1 À¶x
+        PWM_CP_Pin, //?????0 ÂÌx ?????1
+        PWM_CP_Pin, //ºìx ?????0 ?????1
+        PWM_AP_Pin, //?????1 ?????0 À¶x
+        PWM_AP_Pin, //?????1 ÂÌx ?????0
 };
 
 static const uint16_t boost_table_set_PortB[6] =
     {
-        PWM_CN_Pin, //çº¢x ï¿½????1 ï¿½????0
-        PWM_AN_Pin, //ï¿½????0 ï¿½????1 è“x
-        PWM_AN_Pin, //ï¿½????0 ç»¿x ï¿½????1
-        PWM_BN_Pin, //çº¢x ï¿½????0 ï¿½????1
-        PWM_BN_Pin, //ï¿½????1 ï¿½????0 è“x
-        PWM_CN_Pin, //ï¿½????1 ç»¿x ï¿½????0
+        PWM_CN_Pin, //ºìx ?????1 ?????0
+        PWM_AN_Pin, //?????0 ?????1 À¶x
+        PWM_AN_Pin, //?????0 ÂÌx ?????1
+        PWM_BN_Pin, //ºìx ?????0 ?????1
+        PWM_BN_Pin, //?????1 ?????0 À¶x
+        PWM_CN_Pin, //?????1 ÂÌx ?????0
 };
 
 static const uint16_t boost_table_reset_PortA[6] =
     {
-        PWM_AP_Pin | PWM_CP_Pin, //çº¢x ï¿½????1 ï¿½????0
-        PWM_AP_Pin | PWM_CP_Pin, //ï¿½????0 ï¿½????1 è“x
-        PWM_AP_Pin | PWM_BP_Pin, //ï¿½????0 ç»¿x ï¿½????1
-        PWM_AP_Pin | PWM_BP_Pin, //çº¢x ï¿½????0 ï¿½????1
-        PWM_BP_Pin | PWM_CP_Pin, //ï¿½????1 ï¿½????0 è“x
-        PWM_BP_Pin | PWM_CP_Pin, //ï¿½????1 ç»¿x ï¿½????0
+        PWM_AP_Pin | PWM_CP_Pin, //ºìx ?????1 ?????0
+        PWM_AP_Pin | PWM_CP_Pin, //?????0 ?????1 À¶x
+        PWM_AP_Pin | PWM_BP_Pin, //?????0 ÂÌx ?????1
+        PWM_AP_Pin | PWM_BP_Pin, //ºìx ?????0 ?????1
+        PWM_BP_Pin | PWM_CP_Pin, //?????1 ?????0 À¶x
+        PWM_BP_Pin | PWM_CP_Pin, //?????1 ÂÌx ?????0
 };
 
 static const uint16_t boost_table_reset_PortB[6] =
     {
-        PWM_AN_Pin | PWM_BN_Pin, //çº¢x ï¿½????1 ï¿½????0
-        PWM_BN_Pin | PWM_CN_Pin, //ï¿½????0 ï¿½????1 è“x
-        PWM_BN_Pin | PWM_CN_Pin, //ï¿½????0 ç»¿x ï¿½????1
-        PWM_AN_Pin | PWM_CN_Pin, //çº¢x ï¿½????0 ï¿½????1
-        PWM_AN_Pin | PWM_CN_Pin, //ï¿½????1 ï¿½????0 è“x
-        PWM_AN_Pin | PWM_BN_Pin, //ï¿½????1 ç»¿x ï¿½????0
+        PWM_AN_Pin | PWM_BN_Pin, //ºìx ?????1 ?????0
+        PWM_BN_Pin | PWM_CN_Pin, //?????0 ?????1 À¶x
+        PWM_BN_Pin | PWM_CN_Pin, //?????0 ÂÌx ?????1
+        PWM_AN_Pin | PWM_CN_Pin, //ºìx ?????0 ?????1
+        PWM_AN_Pin | PWM_CN_Pin, //?????1 ?????0 À¶x
+        PWM_AN_Pin | PWM_BN_Pin, //?????1 ÂÌx ?????0
 };
 
 uint8_t GetHallState()
@@ -394,7 +396,7 @@ uint8_t GetHallState()
   return s_state;
 }
 
-//64MHzæ—¶é’Ÿæ¡ä»¶ä¸‹ï¼Œçº¦ç­‰äº100ns
+//64MHzÊ±ÖÓÌõ¼şÏÂ£¬Ô¼µÈÓÚ100ns
 void DelayDeadTime()
 {
   __NOP();
@@ -404,7 +406,7 @@ void DelayDeadTime()
   __NOP();
   __NOP();
 }
-//TODO å®šæ—¶å™¨è®¡æ•°æº¢å‡ºä¸­æ–­,htim1åœ¨è¿™é‡Œæ ¹æ®ä½ç½®ä¼ æ„Ÿå™¨å†³å®šé©±åŠ¨ç”µæµæ–¹å‘,
+//TODO ¶¨Ê±Æ÷¼ÆÊıÒç³öÖĞ¶Ï,htim1ÔÚÕâÀï¸ù¾İÎ»ÖÃ´«¸ĞÆ÷¾ö¶¨Çı¶¯µçÁ÷·½Ïò,
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim == (&htim1))
@@ -414,10 +416,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       return;
     }
 
-    //æŸ¥è¡¨è¾“å‡º
+    //²é±íÊä³ö
     uint8_t s_state = GetHallState() + g_PWM_Dir * 8;
 
-    //å…ˆresetï¼Œå†set!
+    //ÏÈreset£¬ÔÙset!
     HAL_GPIO_WritePin(GPIOA, table_reset_PortA[s_state], GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, table_reset_PortB[s_state], GPIO_PIN_RESET);
 
@@ -504,20 +506,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
 }
 
-//è¿™é‡Œä¸»è¦ç”¨äºè®¡ç®—è§’é€Ÿåº¦
+//ÕâÀïÖ÷ÒªÓÃÓÚ¼ÆËã½ÇËÙ¶È
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   if (GPIO_Pin == HSENSOR_C_Pin)
   {
     uint16_t timer_count = (uint16_t)(__HAL_TIM_GET_COUNTER(&htim4));
     uint32_t timer_repeat = g_TCount_Repeats;
-    uint8_t cur_polar = HAL_GPIO_ReadPin(HSENSOR_B_GPIO_Port, HSENSOR_B_Pin); //é€†æ—¶é’ˆæ—‹è½¬æ—¶ï¼Œï¿½?ï¿½åº”ï¿½????????1
+    uint8_t cur_polar = HAL_GPIO_ReadPin(HSENSOR_B_GPIO_Port, HSENSOR_B_Pin); //ÄæÊ±ÕëĞı×ªÊ±£¬???Ó¦?????????1
     static uint16_t pre_timer_count = 0;
     static uint32_t pre_timer_repeat = 0;
     static uint8_t pre_polar = 0;
 
     uint32_t delta_repeat = timer_repeat - pre_timer_repeat;
-    if (delta_repeat > 10) //æ—¶é—´è·¨åº¦å¤§äº1ï¿½?????
+    if (delta_repeat > 10) //Ê±¼ä¿ç¶È´óÓÚ1??????
     {
       g_Wsense = 0;
     }
@@ -525,7 +527,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     {
       if (delta_repeat > 1)
       {
-        delta_repeat = delta_repeat - 1;//delta_repeat == 1 çš„æƒ…å†µï¼Œå·²ç»è¢«uint16_t çš„è¡¥æ•°æœºåˆ¶è¦†ç›–åˆ°ï¼
+        delta_repeat = delta_repeat - 1;//delta_repeat == 1 µÄÇé¿ö£¬ÒÑ¾­±»uint16_t µÄ²¹Êı»úÖÆ¸²¸Çµ½£¡
       }
       else
       {
@@ -533,7 +535,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
       }
 
       uint16_t delta_count = timer_count - pre_timer_count;
-      double delta_t = ((double)delta_count + delta_repeat * 65536) / 720000.0f;//å› ä¸ºé¢„åˆ†é¢‘ä¸º100
+      double delta_t = ((double)delta_count + delta_repeat * 65536) / 720000.0f;//ÒòÎªÔ¤·ÖÆµÎª100
       double delta_angel = 0;
 
       const double angel_p = 2.0 * 3.1415926 / 6.0;
@@ -572,7 +574,7 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef USE_FULL_ASSERT
+#ifdef  USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -581,7 +583,7 @@ void Error_Handler(void)
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)
-{
+{ 
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
