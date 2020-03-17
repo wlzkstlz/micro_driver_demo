@@ -47,6 +47,45 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+/***********************【Encoder】**************************/
+#define _ENCODER_CYCLE_ 60000
+#define _ENCODER_RESET_VALUE_ 30000
+uint32_t g_Encoder = _ENCODER_RESET_VALUE_;
+/***********************【Encoder end】**************************/
+
+/***********************【Speed Sense】**************************/
+uint32_t g_TCount_Repeats = 0;
+double g_Wsense = 0.0f;
+/***********************【Speed Sense end】**************************/
+
+/***********************【PID Controller】**************************/
+uint8_t gb_Release_Motor = 1;
+uint8_t g_PWM_Dir = 0; //0 stands for anticlockwise
+uint32_t g_PWM_Out = 0;
+#define _PWM_CYCLE_FULL_ 2000 //修改定时器周期时，记得同步修改这里！
+#define _PWM_CYCLE_SAFE_ (_PWM_CYCLE_FULL_ - 100)
+#define _PWM_CYCLE_OFFSET_ 200 //400
+
+#define _PWM_BASE_SCALE_ (_PWM_CYCLE_FULL_ * (1.0 / (2.0 * 3.1416 * 4500.0 * 7.2 / 60.0)))
+double g_Vset = -123.0; //对应15000rpm
+
+double g_Err_Pre = 0;
+float g_PWM = 0;
+const float g_Kp = 1.0 * _PWM_BASE_SCALE_;
+const float g_Ki = 0.05 * g_Kp;
+const float g_Tscale = 1.0;
+
+/***********************【PID Controller end】**************************/
+
+/***********************【Block Boost】**************************/
+uint8_t gb_Blocked = 0;
+uint16_t gn_Block_Boost_Count = 0;
+uint8_t gn_Block_Boost_Offset = 0;
+#define _BOOST_COUNTS_ (((uint32_t)(4 * 9 * 1) / (uint32_t)6) * 6) //要求�????6的�?�数
+
+//TODO : 将拖动电压设置为可以pwm调节,以缓解启动发热问�????
+
+/***********************【Block Boost End】**************************/
 
 /* USER CODE END PV */
 
@@ -68,9 +107,10 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+  //尽可能快速地将mosfet驱动 gpio设置低电平！
+  GPIOA->BSRR = (uint32_t)(PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin) << 16u;
+  GPIOB->BSRR = (uint32_t)(PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin) << 16u;
   /* USER CODE END 1 */
-  
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -97,6 +137,21 @@ int main(void)
   MX_TIM4_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  //【encoder Timer2 init】
+  __HAL_TIM_SET_COUNTER(&htim2, _ENCODER_RESET_VALUE_); //初始化定时器初始值为_ENCODER_RESET_VALUE_
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+
+  //【pwm Timer1 init】
+  HAL_TIM_Base_Start_IT(&htim1);
+  HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_2);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+
+  //【1k Hz Timer3 init】
+  HAL_TIM_Base_Start_IT(&htim3);
+
+  //【Timer4 init】
+  HAL_TIM_Base_Start_IT(&htim4);
 
   /* USER CODE END 2 */
 
@@ -134,8 +189,7 @@ void SystemClock_Config(void)
   }
   /** Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
@@ -149,6 +203,361 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+//pwm 占空比高电平结束回调函数，在这里清零电机驱动
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim == (&htim1))
+  {
+    if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+    {
+      if (gn_Block_Boost_Count > 0)
+      {
+        return;
+      }
+
+      HAL_GPIO_WritePin(GPIOA, PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(GPIOB, PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin, GPIO_PIN_RESET);
+    }
+  }
+}
+
+static const uint16_t table_set_PortA[16] =
+    {
+        PWM_BP_Pin,
+        PWM_BP_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_AP_Pin,
+        PWM_CP_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_CP_Pin,
+        PWM_AP_Pin,
+        ///////////////////////////////////////////////
+        PWM_AP_Pin,
+        PWM_CP_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_CP_Pin,
+        PWM_AP_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_BP_Pin,
+        PWM_BP_Pin};
+
+static const uint16_t table_set_PortB[16] =
+    {
+        PWM_AN_Pin,
+        PWM_CN_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_CN_Pin,
+        PWM_AN_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_BN_Pin,
+        PWM_BN_Pin,
+        ///////////////////////////////////////////////
+        PWM_BN_Pin,
+        PWM_BN_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_AN_Pin,
+        PWM_CN_Pin,
+        //---------------------------------
+        0,
+        //---------------------------------//
+        PWM_CN_Pin,
+        PWM_AN_Pin};
+
+static const uint16_t table_reset_PortA[16] =
+    {
+        PWM_AP_Pin | PWM_CP_Pin,
+        PWM_AP_Pin | PWM_CP_Pin,
+        //---------------------------------
+        PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin,
+        //---------------------------------//
+        PWM_BP_Pin | PWM_CP_Pin,
+        PWM_AP_Pin | PWM_BP_Pin,
+        //---------------------------------
+        PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin,
+        //---------------------------------//
+        PWM_AP_Pin | PWM_BP_Pin,
+        PWM_BP_Pin | PWM_CP_Pin,
+        ///////////////////////////////////////////////////////////
+        PWM_BP_Pin | PWM_CP_Pin,
+        PWM_AP_Pin | PWM_BP_Pin,
+        //---------------------------------
+        PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin,
+        //---------------------------------//
+        PWM_AP_Pin | PWM_BP_Pin,
+        PWM_BP_Pin | PWM_CP_Pin,
+        //---------------------------------
+        PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin,
+        //---------------------------------//
+        PWM_AP_Pin | PWM_CP_Pin,
+        PWM_AP_Pin | PWM_CP_Pin};
+static const uint16_t table_reset_PortB[16] =
+    {
+        PWM_BN_Pin | PWM_CN_Pin,
+        PWM_AN_Pin | PWM_BN_Pin,
+        //---------------------------------
+        PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin,
+        //---------------------------------//
+        PWM_AN_Pin | PWM_BN_Pin,
+        PWM_BN_Pin | PWM_CN_Pin,
+        //---------------------------------
+        PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin,
+        //---------------------------------//
+        PWM_AN_Pin | PWM_CN_Pin,
+        PWM_AN_Pin | PWM_CN_Pin,
+        ///////////////////////////////////////////////////////////
+        PWM_AN_Pin | PWM_CN_Pin,
+        PWM_AN_Pin | PWM_CN_Pin,
+        //---------------------------------
+        PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin,
+        //---------------------------------//
+        PWM_BN_Pin | PWM_CN_Pin,
+        PWM_AN_Pin | PWM_BN_Pin,
+        //---------------------------------
+        PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin,
+        //---------------------------------//
+        PWM_AN_Pin | PWM_BN_Pin,
+        PWM_BN_Pin | PWM_CN_Pin};
+
+static const uint8_t boost_table_offset[8] =
+    {
+        //红绿�????
+        5, //0 0 0
+        4, //0 0 1
+        0, //xxx
+        3, //0 1 1
+        0, //1 0 0
+        0, //xxx
+        1, //1 1 0
+        2  //1 1 1
+};
+
+static const uint16_t boost_table_set_PortA[6] =
+    {
+        PWM_BP_Pin, //红x �????1 �????0
+        PWM_BP_Pin, //�????0 �????1 蓝x
+        PWM_CP_Pin, //�????0 绿x �????1
+        PWM_CP_Pin, //红x �????0 �????1
+        PWM_AP_Pin, //�????1 �????0 蓝x
+        PWM_AP_Pin, //�????1 绿x �????0
+};
+
+static const uint16_t boost_table_set_PortB[6] =
+    {
+        PWM_CN_Pin, //红x �????1 �????0
+        PWM_AN_Pin, //�????0 �????1 蓝x
+        PWM_AN_Pin, //�????0 绿x �????1
+        PWM_BN_Pin, //红x �????0 �????1
+        PWM_BN_Pin, //�????1 �????0 蓝x
+        PWM_CN_Pin, //�????1 绿x �????0
+};
+
+static const uint16_t boost_table_reset_PortA[6] =
+    {
+        PWM_AP_Pin | PWM_CP_Pin, //红x �????1 �????0
+        PWM_AP_Pin | PWM_CP_Pin, //�????0 �????1 蓝x
+        PWM_AP_Pin | PWM_BP_Pin, //�????0 绿x �????1
+        PWM_AP_Pin | PWM_BP_Pin, //红x �????0 �????1
+        PWM_BP_Pin | PWM_CP_Pin, //�????1 �????0 蓝x
+        PWM_BP_Pin | PWM_CP_Pin, //�????1 绿x �????0
+};
+
+static const uint16_t boost_table_reset_PortB[6] =
+    {
+        PWM_AN_Pin | PWM_BN_Pin, //红x �????1 �????0
+        PWM_BN_Pin | PWM_CN_Pin, //�????0 �????1 蓝x
+        PWM_BN_Pin | PWM_CN_Pin, //�????0 绿x �????1
+        PWM_AN_Pin | PWM_CN_Pin, //红x �????0 �????1
+        PWM_AN_Pin | PWM_CN_Pin, //�????1 �????0 蓝x
+        PWM_AN_Pin | PWM_BN_Pin, //�????1 绿x �????0
+};
+
+uint8_t GetHallState()
+{
+  GPIO_PinState sa = 1 - HAL_GPIO_ReadPin(HSENSOR_A_GPIO_Port, HSENSOR_A_Pin);
+  GPIO_PinState sb = 1 - HAL_GPIO_ReadPin(HSENSOR_B_GPIO_Port, HSENSOR_B_Pin);
+  GPIO_PinState sc = 1 - HAL_GPIO_ReadPin(HSENSOR_C_GPIO_Port, HSENSOR_C_Pin);
+  uint8_t s_state = (((uint8_t)sa) << 2) | (((uint8_t)sb) << 1) | (((uint8_t)sc) << 0);
+  return s_state;
+}
+
+//64MHz时钟条件下，约等于100ns
+void DelayDeadTime()
+{
+  __NOP();
+  __NOP();
+  __NOP();
+  __NOP();
+  __NOP();
+  __NOP();
+}
+//TODO 定时器计数溢出中断,htim1在这里根据位置传感器决定驱动电流方向,
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim == (&htim1))
+  {
+    if (gn_Block_Boost_Count > 0 || gb_Release_Motor > 0)
+    {
+      return;
+    }
+
+    //查表输出
+    uint8_t s_state = GetHallState() + g_PWM_Dir * 8;
+
+    //先reset，再set!
+    HAL_GPIO_WritePin(GPIOA, table_reset_PortA[s_state], GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, table_reset_PortB[s_state], GPIO_PIN_RESET);
+
+    DelayDeadTime();
+
+    HAL_GPIO_WritePin(GPIOA, table_set_PortA[s_state], GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOB, table_set_PortB[s_state], GPIO_PIN_SET);
+  }
+
+  else if (htim == (&htim3)) //1k hz
+  {
+    //0.0 release motor
+    if (gb_Release_Motor > 0)
+      return;
+    //1.0 block proccess
+    if (gb_Blocked >= 1 && gn_Block_Boost_Count == 0)
+    {
+      gn_Block_Boost_Count = _BOOST_COUNTS_; // START A BOOST PROCCESS...
+      uint8_t s_state = GetHallState();
+      gn_Block_Boost_Offset = boost_table_offset[s_state];
+    }
+
+    if (gn_Block_Boost_Count > 0)
+    {
+      uint8_t idx;
+      if (g_Vset > 0)
+        idx = (gn_Block_Boost_Offset + _BOOST_COUNTS_ - gn_Block_Boost_Count) % 6;
+      else
+        idx = (gn_Block_Boost_Offset + gn_Block_Boost_Count) % 6;
+      HAL_GPIO_WritePin(GPIOA, boost_table_reset_PortA[idx], GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(GPIOB, boost_table_reset_PortB[idx], GPIO_PIN_RESET);
+      DelayDeadTime();
+      HAL_GPIO_WritePin(GPIOA, boost_table_set_PortA[idx], GPIO_PIN_SET);
+      HAL_GPIO_WritePin(GPIOB, boost_table_set_PortB[idx], GPIO_PIN_SET);
+
+      gn_Block_Boost_Count--;
+      return;
+    }
+
+    //2.0 pid control
+    double Err_Cur = g_Vset - g_Wsense;
+    float d_pwm = g_Tscale * (g_Kp * (Err_Cur - g_Err_Pre) + g_Ki * Err_Cur);
+    g_PWM += d_pwm;
+
+    float pwm_base = _PWM_BASE_SCALE_ * Err_Cur;
+    float pwm_cur = g_PWM + pwm_base;
+
+    if (pwm_cur >= _PWM_CYCLE_SAFE_ - _PWM_CYCLE_OFFSET_)
+    {
+      pwm_cur = _PWM_CYCLE_SAFE_ - _PWM_CYCLE_OFFSET_ - 1;
+    }
+    if (pwm_cur <= -(_PWM_CYCLE_SAFE_ - _PWM_CYCLE_OFFSET_))
+    {
+      pwm_cur = -(_PWM_CYCLE_SAFE_ - _PWM_CYCLE_OFFSET_ - 1);
+    }
+    g_PWM = pwm_cur - pwm_base;
+
+    g_PWM_Out = abs((int32_t)pwm_cur) + _PWM_CYCLE_OFFSET_;
+    g_PWM_Dir = pwm_cur > 0 ? 0 : 1;
+
+    g_Err_Pre = Err_Cur;
+
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_PWM_Out);
+  }
+  else if (htim == (&htim4)) //about 10Hz
+  {
+    g_TCount_Repeats++;
+    static uint16_t pre_encoder = 0;
+    uint16_t cur_encoder = __HAL_TIM_GET_COUNTER(&htim2);
+    if (cur_encoder == pre_encoder)
+    {
+      g_Wsense = 0;
+
+      if (g_Vset > 1e-3 || g_Vset < -1e-3)
+      {
+        gb_Blocked = 1;
+      }
+    }
+    else
+    {
+      gb_Blocked = 0;
+    }
+    pre_encoder = cur_encoder;
+  }
+}
+
+//这里主要用于计算角速度
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == HSENSOR_C_Pin)
+  {
+    uint16_t timer_count = (uint16_t)(__HAL_TIM_GET_COUNTER(&htim4));
+    uint32_t timer_repeat = g_TCount_Repeats;
+    uint8_t cur_polar = HAL_GPIO_ReadPin(HSENSOR_B_GPIO_Port, HSENSOR_B_Pin); //逆时针旋转时，�?�应�????????1
+    static uint16_t pre_timer_count = 0;
+    static uint32_t pre_timer_repeat = 0;
+    static uint8_t pre_polar = 0;
+
+    uint32_t delta_repeat = timer_repeat - pre_timer_repeat;
+    if (delta_repeat > 10) //时间跨度大于1�?????
+    {
+      g_Wsense = 0;
+    }
+    else
+    {
+      if (delta_repeat > 1)
+      {
+        delta_repeat = delta_repeat - 1;//delta_repeat == 1 的情况，已经被uint16_t 的补数机制覆盖到！
+      }
+      else
+      {
+        delta_repeat = 0;
+      }
+
+      uint16_t delta_count = timer_count - pre_timer_count;
+      double delta_t = ((double)delta_count + delta_repeat * 65536) / 720000.0f;//因为预分频为100
+      double delta_angel = 0;
+
+      const double angel_p = 2.0 * 3.1415926 / 6.0;
+      if ((pre_polar == 1) && (cur_polar == 1))
+      {
+        delta_angel = angel_p;
+      }
+      else if ((pre_polar == 0) && (cur_polar == 0))
+      {
+        delta_angel = -angel_p;
+      }
+      else
+      {
+        delta_angel = 0;
+      }
+
+      g_Wsense = delta_angel / delta_t;
+    }
+
+    pre_timer_count = timer_count;
+    pre_timer_repeat = timer_repeat;
+    pre_polar = cur_polar;
+  }
+}
 /* USER CODE END 4 */
 
 /**
@@ -163,7 +572,7 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -172,7 +581,7 @@ void Error_Handler(void)
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)
-{ 
+{
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
