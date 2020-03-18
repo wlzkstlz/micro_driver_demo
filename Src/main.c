@@ -55,7 +55,7 @@ uint32_t g_Encoder = _ENCODER_RESET_VALUE_;
 
 /***********************【Speed Sense】**************************/
 uint32_t g_TCount_Repeats = 0;
-double g_Wsense = 0.0f;
+double g_Wsense = 0.0f; //radian unit
 /***********************【Speed Sense end】**************************/
 
 /***********************【PID Controller】**************************/
@@ -67,7 +67,7 @@ uint32_t g_PWM_Out = 0;
 #define _PWM_CYCLE_OFFSET_ 200 //400
 
 #define _PWM_BASE_SCALE_ (_PWM_CYCLE_FULL_ * (1.0 / (2.0 * 3.1416 * 4500.0 * 7.2 / 60.0)))
-double g_Vset = -123.0; //对应15000rpm
+double g_Vset = 0.0; //-123.0; //对应15000rpm
 
 double g_Err_Pre = 0;
 float g_PWM = 0;
@@ -97,7 +97,26 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/***********************【Debug Info】**************************/
+void send_debug_info_pwm_w(int16_t pwm, int32_t encoder, float w)
+{
+  const size_t data_length = 1 + sizeof(int16_t) + sizeof(int32_t) + sizeof(float) + 2;
+  uint8_t data[data_length];
+  data[0] = 0xa5;
+  data[data_length - 2] = 0;
+  data[data_length - 1] = 0x5a;
 
+  memcpy(data + 1, (uint8_t *)(&pwm), sizeof(int16_t));
+  memcpy(data + 1 + sizeof(int16_t), (uint8_t *)(&encoder), sizeof(int32_t));
+  memcpy(data + 1 + sizeof(int16_t) + sizeof(int32_t), (uint8_t *)(&w), sizeof(float));
+
+  for (size_t i = 1; i < data_length - 2; i++)
+  {
+    data[data_length - 2] += data[i];
+  }
+
+  HAL_UART_Transmit(&huart1, data, data_length, 0xFFFF);
+}
 /* USER CODE END 0 */
 
 /**
@@ -145,7 +164,6 @@ int main(void)
   //【pwm Timer1 init】
   HAL_TIM_Base_Start_IT(&htim1);
   HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_2);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
 
   //【1k Hz Timer3 init】
@@ -158,8 +176,48 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  //debug step1 !!!!!
+  gb_Release_Motor = 1; //0;
+  g_Vset = 0;           //150;
+
   while (1)
   {
+    HAL_Delay(20);
+
+    //Send Debug Info
+    g_Encoder = __HAL_TIM_GET_COUNTER(&htim2);
+    send_debug_info_pwm_w(g_PWM_Out, g_Encoder, g_Wsense);
+
+//debug step2 !!!!!
+#if 1
+    static uint8_t pingpong = 0;
+    if (pingpong == 0)
+    {
+      if (g_Encoder < 100 + _ENCODER_RESET_VALUE_)
+      {
+        gb_Release_Motor = 0;
+        g_Vset = 150;
+      }
+      else
+      {
+        pingpong = 1;
+      }
+    }
+    else if (pingpong == 1)
+    {
+      if (g_Encoder > _ENCODER_RESET_VALUE_)
+      {
+        gb_Release_Motor = 0;
+        g_Vset = -150;
+      }
+      else
+      {
+        pingpong = 0;
+      }
+    }
+#endif
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -417,7 +475,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 
     //查表输出
-    uint8_t s_state = GetHallState() + g_PWM_Dir * 8;
+    const uint8_t s_state = GetHallState() + g_PWM_Dir * 8;
 
     //先reset，再set!
     HAL_GPIO_WritePin(GPIOA, table_reset_PortA[s_state], GPIO_PIN_RESET);
@@ -527,7 +585,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     {
       if (delta_repeat > 1)
       {
-        delta_repeat = delta_repeat - 1;//delta_repeat == 1 的情况，已经被uint16_t 的补数机制覆盖到！
+        delta_repeat = delta_repeat - 1; //delta_repeat == 1 的情况，已经被uint16_t 的补数机制覆盖到！
       }
       else
       {
@@ -535,7 +593,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
       }
 
       uint16_t delta_count = timer_count - pre_timer_count;
-      double delta_t = ((double)delta_count + delta_repeat * 65536) / 720000.0f;//因为预分频为100
+      double delta_t = ((double)delta_count + delta_repeat * 65536) / 640000.0f; //因为预分频为100
       double delta_angel = 0;
 
       const double angel_p = 2.0 * 3.1415926 / 6.0;
