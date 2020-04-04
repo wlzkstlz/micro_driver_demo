@@ -565,7 +565,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
     //TODO test
     g_PWM_Dir=0;
-    g_PWM_Out = 400;
+    g_PWM_Out = 4000;
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_PWM_Out);
   }
   else if (htim == (&htim4)) //about 10Hz

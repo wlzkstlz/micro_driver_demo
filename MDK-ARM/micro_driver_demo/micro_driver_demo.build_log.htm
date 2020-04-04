@@ -1,0 +1,66 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: ¦ÌVision V5.14.0.0
+Copyright (C) 2015 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: huang hao, hh, LIC=----
+ 
+Tool Versions:
+Toolchain:       MDK-Lite  Version: 5.14.0.0
+Toolchain Path:  C:\Keil_v5\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.05 update 1 (build 106)
+Assembler:       Armasm.exe V5.05 update 1 (build 106)
+Linker/Locator:  ArmLink.exe V5.05 update 1 (build 106)
+Library Manager: ArmAr.exe V5.05 update 1 (build 106)
+Hex Converter:   FromElf.exe V5.05 update 1 (build 106)
+CPU DLL:         SARMCM3.DLL V5.14.0.0
+Dialog DLL:      DCM.DLL V1.13.1.0
+Target DLL:      STLink\ST-LINKIII-KEIL_SWO.dll V2.0.14.0_KEIL
+Dialog DLL:      TCM.DLL V1.14.4.0
+ 
+<h2>Project:</h2>
+C:\Users\stephen\Documents\GitProjects\micro_driver_demo\MDK-ARM\micro_driver_demo.uvprojx
+Project File Date:  04/04/2020
+
+<h2>Output:</h2>
+Build target 'micro_driver_demo'
+compiling main.c...
+../Src/main.c(109): warning:  #223-D: function "memcpy" declared implicitly
+    memcpy(data + 1, (uint8_t *)(&pwm), sizeof(int16_t));
+../Src/main.c(473): warning:  #188-D: enumerated type mixed with another type
+    GPIO_PinState sa = 1 - HAL_GPIO_ReadPin(HSENSOR_A_GPIO_Port, HSENSOR_A_Pin);
+../Src/main.c(474): warning:  #188-D: enumerated type mixed with another type
+    GPIO_PinState sb = 1 - HAL_GPIO_ReadPin(HSENSOR_B_GPIO_Port, HSENSOR_B_Pin);
+../Src/main.c(475): warning:  #188-D: enumerated type mixed with another type
+    GPIO_PinState sc = 1 - HAL_GPIO_ReadPin(HSENSOR_C_GPIO_Port, HSENSOR_C_Pin);
+../Src/main.c(561): warning:  #223-D: function "abs" declared implicitly
+      g_PWM_Out = abs((int32_t)pwm_cur) + _PWM_CYCLE_OFFSET_;
+../Src/main.c: 5 warnings, 0 errors
+compiling tim.c...
+linking...
+Program Size: Code=13020 RO-data=488 RW-data=80 ZI-data=1384  
+FromELF: creating hex file...
+"micro_driver_demo\micro_driver_demo.axf" - 0 Error(s), 5 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: ARM
+                http://www.keil.com/pack/ARM.CMSIS.4.2.0.pack
+                ARM::CMSIS:CORE:3.40.0
+                CMSIS (Cortex Microcontroller Software Interface Standard)
+   * Component: CORE Version: 3.40.0
+
+<h2>Collection of Component include folders:</h2>
+  C:\Users\stephen\Documents\GitProjects\micro_driver_demo\MDK-ARM\RTE
+  C:\Keil_v5\ARM\PACK\ARM\CMSIS\4.2.0\CMSIS\Include
+  C:\Keil_v5\ARM\PACK\Keil\STM32F1xx_DFP\1.0.5\Device\Include
+
+<h2>Collection of Component Files used:</h2>
+
+   * Component: ARM::CMSIS:CORE:3.40.0
+      Source file:   CMSIS\UserCodeTemplates\ARM\ITM_Retarget.c
+</pre>
+</body>
+</html>
