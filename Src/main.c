@@ -157,6 +157,18 @@ int main(void)
   MX_TIM4_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  // while (1)
+  // {
+  //   HAL_Delay(20);
+  //   HAL_GPIO_WritePin(PWM_CN_GPIO_Port, PWM_CN_Pin, GPIO_PIN_SET);
+  //   //LED1_Pin
+  //   HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_SET);
+  //   HAL_Delay(100);
+  //   HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_RESET);
+  //   HAL_Delay(100);
+  // }
+  HAL_Delay(30);
+
   //【encoder Timer2 init】
   __HAL_TIM_SET_COUNTER(&htim2, _ENCODER_RESET_VALUE_); //初始化定时器初始值为_ENCODER_RESET_VALUE_
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
@@ -181,9 +193,20 @@ int main(void)
   gb_Release_Motor = 1; //0;
   g_Vset = 0;           //150;
 
+  int i = 0;
   while (1)
   {
     HAL_Delay(20);
+    i++;
+
+    if (i % 10 == 0)
+    {
+      HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_SET);
+    }
+    else if (i % 10 == 5)
+    {
+      HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_RESET);
+    }
 
     //Send Debug Info
     g_Encoder = __HAL_TIM_GET_COUNTER(&htim2);
@@ -194,7 +217,7 @@ int main(void)
     static uint8_t pingpong = 0;
     if (pingpong == 0)
     {
-      if (g_Encoder < 100 + _ENCODER_RESET_VALUE_)
+      if (g_Encoder < 1000 + _ENCODER_RESET_VALUE_)
       {
         gb_Release_Motor = 0;
         g_Vset = 150;
@@ -495,7 +518,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     //1.0 block proccess
     if (gb_Blocked >= 1 && gn_Block_Boost_Count == 0)
     {
-      gn_Block_Boost_Count = _BOOST_COUNTS_; // START A BOOST PROCCESS...
+      //gn_Block_Boost_Count = _BOOST_COUNTS_; // START A BOOST PROCCESS...
       uint8_t s_state = GetHallState();
       gn_Block_Boost_Offset = boost_table_offset[s_state];
     }
@@ -540,6 +563,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
     g_Err_Pre = Err_Cur;
 
+    //TODO test
+    g_PWM_Dir=0;
+    g_PWM_Out = 400;
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_PWM_Out);
   }
   else if (htim == (&htim4)) //about 10Hz
