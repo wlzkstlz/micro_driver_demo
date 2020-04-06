@@ -39,7 +39,8 @@ extern CAN_HandleTypeDef hcan;
 void MX_CAN_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-
+void CAN_User_Init(CAN_HandleTypeDef *hcan); //用户初始化函数
+uint8_t CANx_SendNormalData(CAN_HandleTypeDef *hcan, uint16_t ID, uint8_t *pData, uint16_t Len);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

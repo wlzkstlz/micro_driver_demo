@@ -117,6 +117,20 @@ void send_debug_info_pwm_w(int16_t pwm, int32_t encoder, float w)
 
   HAL_UART_Transmit(&huart1, data, data_length, 0xFFFF);
 }
+
+/***************************【can bus】********************************/
+CAN_TxHeaderTypeDef canTxMsg;
+uint32_t tx_mail_box;
+uint8_t can_data[8] = {'c', 'a', 'n', ' ', 't', 'e', 's', 't'};
+void send_can_bus()
+{
+  canTxMsg.StdId = 0x123;
+  canTxMsg.RTR = CAN_RTR_DATA;
+  canTxMsg.IDE = CAN_ID_STD;
+  canTxMsg.DLC = 8;
+
+  HAL_StatusTypeDef ret = HAL_CAN_AddTxMessage(&hcan, &canTxMsg, can_data, &tx_mail_box);
+}
 /* USER CODE END 0 */
 
 /**
@@ -130,7 +144,6 @@ int main(void)
   GPIOA->BSRR = (uint32_t)(PWM_AP_Pin | PWM_BP_Pin | PWM_CP_Pin) << 16u;
   GPIOB->BSRR = (uint32_t)(PWM_AN_Pin | PWM_BN_Pin | PWM_CN_Pin) << 16u;
   /* USER CODE END 1 */
-  
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -157,33 +170,14 @@ int main(void)
   MX_TIM4_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  // while (1)
-  // {
-  //   HAL_Delay(20);
-  //   HAL_GPIO_WritePin(PWM_CN_GPIO_Port, PWM_CN_Pin, GPIO_PIN_SET);
-  //   //LED1_Pin
-  //   HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_SET);
-  //   HAL_Delay(100);
-  //   HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_RESET);
-  //   HAL_Delay(100);
-  // }
-  HAL_Delay(30);
-
-  //【encoder Timer2 init】
-  __HAL_TIM_SET_COUNTER(&htim2, _ENCODER_RESET_VALUE_); //初始化定时器初始值为_ENCODER_RESET_VALUE_
-  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-
-  //【pwm Timer1 init】
-  HAL_TIM_Base_Start_IT(&htim1);
-  HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_1);
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
-
-  //【1k Hz Timer3 init】
-  HAL_TIM_Base_Start_IT(&htim3);
-
-  //【Timer4 init】
-  HAL_TIM_Base_Start_IT(&htim4);
-
+  //CAN_User_Init(&hcan);
+  HAL_StatusTypeDef HAL_Status = HAL_CAN_Start(&hcan); //开启CAN
+  if (HAL_Status != HAL_OK)
+  {
+    int i = 9;
+    i++;
+    //printf("开启CAN失败\r\n");
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -196,24 +190,30 @@ int main(void)
   int i = 0;
   while (1)
   {
-    HAL_Delay(20);
+    HAL_Delay(2);
     i++;
 
     if (i % 10 == 0)
     {
+      //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);
       HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_SET);
     }
     else if (i % 10 == 5)
     {
+      //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
       HAL_GPIO_WritePin(GPIOB, LED1_Pin, GPIO_PIN_RESET);
     }
 
     //Send Debug Info
     g_Encoder = __HAL_TIM_GET_COUNTER(&htim2);
-    send_debug_info_pwm_w(g_PWM_Out, g_Encoder, g_Wsense);
+    //send_debug_info_pwm_w(g_PWM_Out, g_Encoder, g_Wsense);
 
+    //debug can bus
+    //HAL_CAN_Transmit(&hcan, 10);
+    send_can_bus();
+    //CANx_SendNormalData(&hcan, 0x012, can_data, 8);
 //debug step2 !!!!!
-#if 1
+#if 0
     static uint8_t pingpong = 0;
     if (pingpong == 0)
     {
@@ -271,8 +271,7 @@ void SystemClock_Config(void)
   }
   /** Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
@@ -486,6 +485,13 @@ void DelayDeadTime()
   __NOP();
   __NOP();
   __NOP();
+
+  __NOP();
+  __NOP();
+  __NOP();
+  __NOP();
+  __NOP();
+  __NOP();
 }
 //TODO 定时器计数溢出中断,htim1在这里根据位置传感器决定驱动电流方向,
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -564,8 +570,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     g_Err_Pre = Err_Cur;
 
     //TODO test
-    g_PWM_Dir=0;
-    g_PWM_Out = 4000;
+    g_PWM_Dir = 0;
+    g_PWM_Out = 8000;
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, g_PWM_Out);
   }
   else if (htim == (&htim4)) //about 10Hz
@@ -658,7 +664,7 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -667,7 +673,7 @@ void Error_Handler(void)
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)
-{ 
+{
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
